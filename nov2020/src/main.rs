@@ -43,7 +43,7 @@ fn main() {
                     let light_v = light.o - hit_p;
                     let light_n = light_v.normalize();
                     if !one_time_intersection(&Ray {o: hit_p + norm * 1e-4, d: light_n}, world_spheres.as_slice()) {
-                        let dist: f32 = light_v.len() as f32;
+                        let dist: f32 = light_v.norm() as f32;
                         let lint = norm.dot(&light_n) * light.i / dist.powf(2.0);
                         out_col = out_col + (Color::from_color(&sphere.col) * lint);
                     }
