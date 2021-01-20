@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <math.h>
+#include <time.h>
 
 #ifndef M_PI
 #define M_PI 3.1415926535
@@ -17,6 +18,7 @@
 enum { WIDTH = 800, HEIGHT = 600 };
 const double FOV = 90.0;
 const double A_R = (double)WIDTH/(double)HEIGHT;
+const int    SS  = 10;
 
 struct Vec3
 {
@@ -45,6 +47,14 @@ struct Vec3 vec3_scale(struct Vec3 *a, double b)
 {
 	struct Vec3 out = {
 		a->x * b, a->y * b, a->z * b
+	};
+	return out;
+}
+
+struct Vec3 vec3_div(struct Vec3 *a, double b)
+{
+	struct Vec3 out = {
+		a->x / b, a->y / b, a->z / b
 	};
 	return out;
 }
@@ -83,7 +93,7 @@ struct Sphere
 	double r;
 };
 
-struct Ray create_ray(int x, int y);
+struct Ray create_ray(double x, double y);
 
 int sphere_hit(struct Ray *r, struct Sphere *sp, double *t);
 
@@ -91,9 +101,19 @@ struct Vec3 sphere_normal(struct Vec3 *sp_o , struct Vec3 *hit);
 
 void swap(double*, double*);
 
+double gamma_encode(double a)
+{
+	return pow(a, 1.0/GAMMA);
+}
+
 void print_vec3(struct Vec3 *a)
 {
 	printf("[%f, %f, %f]\n", a->x, a->y, a->z);
+}
+
+double rand_2()
+{
+	return (double)rand() / (double)RAND_MAX;
 }
 
 int main(void)
@@ -102,41 +122,58 @@ int main(void)
 	struct Sphere sp = {{0.0, 0.0, -5.0}, 3.0};
 	struct Sphere light = {{2.0, 1.0, -1.0}, 5.0};
 
+	clock_t begin = clock();
+
 	for (int y = 0; y < HEIGHT; y++)
 	{
 		for (int x = 0; x < WIDTH; x++)
 		{
-			struct Ray ray = create_ray(x, y);
+			struct Vec3 out_col = {0.0, 0.0, 0.0};
 
-			int pos = (WIDTH*3 * y) + (3 * x);
-
-			double t;
-
-			if (sphere_hit(&ray, &sp, &t))
+			for (int s = 0; s < SS; s++)
 			{
-				struct Vec3 dist = vec3_scale(&ray.d, t);
-				struct Vec3 hit_p = vec3_add(&ray.o, &dist);
-				struct Vec3 norml = sphere_normal(&sp.o, &hit_p);
-				struct Vec3 light_v = vec3_sub(&light.o, &hit_p);
-				struct Vec3 light_n = vec3_norm(&light_v);
-				double l_int = max(vec3_dot(&norml, &light_n) * light.r / pow(vec3_mag(&light_v), 2.0), 0.1);
-				data[pos + 0] = to_rgb((200.0/255.0)*l_int);
-				data[pos + 1] = to_rgb((35.0/255.0)*l_int);
-				data[pos + 2] = to_rgb((35.0/255.0)*l_int);
+				// struct Ray ray = create_ray(x, y);
+				struct Ray ray = create_ray((double)x + rand_2(), (double)y + rand_2());
+
+				double t;
+
+				if (sphere_hit(&ray, &sp, &t))
+				{
+					struct Vec3 dist = vec3_scale(&ray.d, t);
+					struct Vec3 hit_p = vec3_add(&ray.o, &dist);
+					struct Vec3 norml = sphere_normal(&sp.o, &hit_p);
+					struct Vec3 light_v = vec3_sub(&light.o, &hit_p);
+					struct Vec3 light_n = vec3_norm(&light_v);
+					double l_int = vec3_dot(&norml, &light_n) * light.r / pow(vec3_mag(&light_v), 2.0);
+					struct Vec3 col = {gamma_encode((200.0 / 255.0) * l_int), gamma_encode((35.0 / 255.0) * l_int), gamma_encode((35.0 / 255.0) * l_int)};
+					out_col = vec3_add(&out_col, &col);
+				}
 			}
+
+			out_col = vec3_div(&out_col, SS);
+
+			int pos = (WIDTH * 3 * y) + (3 * x);
+
+			data[pos + 0] = to_rgb(out_col.x);
+			data[pos + 1] = to_rgb(out_col.y);
+			data[pos + 2] = to_rgb(out_col.z);
 		}
 	}
 
+	clock_t end = clock();
+
 	stbi_write_png("out.png", WIDTH, HEIGHT, 3, data, WIDTH*3);
+
+	printf("Time rendering: %f s\n", (double)(end - begin)/CLOCKS_PER_SEC);
 
 	return 0;
 }
 
-struct Ray create_ray(int x, int y)
+struct Ray create_ray(double x, double y)
 {
 	double fov = tan(to_radians(FOV) / 2.0);
-	double r_x = ((((double)x + 0.5) / WIDTH) * 2.0 - 1.0) * A_R * fov;
-	double r_y = (1.0 - (((double)y + 0.5) / HEIGHT) * 2.0) * fov;
+	double r_x = (((x + 0.5) / WIDTH) * 2.0 - 1.0) * A_R * fov;
+	double r_y = (1.0 - ((y + 0.5) / HEIGHT) * 2.0) * fov;
 
 	struct Vec3 dir = {
 		r_x, r_y, -1.0
