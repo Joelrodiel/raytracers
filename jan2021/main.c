@@ -100,7 +100,7 @@ int main(void)
 {
 	unsigned char data[WIDTH*HEIGHT*3+(WIDTH*4)];
 	struct Sphere sp = {{0.0, 0.0, -5.0}, 3.0};
-	struct Sphere light = {{2.0, 1.0, -1.0}, -5.0};
+	struct Sphere light = {{2.0, 1.0, -1.0}, 5.0};
 
 	for (int y = 0; y < HEIGHT; y++)
 	{
@@ -117,9 +117,6 @@ int main(void)
 				struct Vec3 dist = vec3_scale(&ray.d, t);
 				struct Vec3 hit_p = vec3_add(&ray.o, &dist);
 				struct Vec3 norml = sphere_normal(&sp.o, &hit_p);
-				norml.x *= -1;
-				norml.y *= -1;
-				norml.z *= -1;
 				struct Vec3 light_v = vec3_sub(&light.o, &hit_p);
 				struct Vec3 light_n = vec3_norm(&light_v);
 				double l_int = max(vec3_dot(&norml, &light_n) * light.r / pow(vec3_mag(&light_v), 2.0), 0.1);
