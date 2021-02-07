@@ -8,6 +8,9 @@
 
 #define GAMMA 2.2
 
+#define DBL_MAX 1.7976931348623158e+308
+#define RAND_MAX 0x7fff
+
 #define to_radians(angle) ((angle) * M_PI / 180.0)
 #define to_rgb(f) (f >= 1.0 ? 255 : (f <= 0.0 ? 0 : (int)floor(f * 256.0)))
 #define max(a, b) ((a > b) ? a : b)
@@ -81,6 +84,13 @@ struct Vec3 vec3_norm(struct Vec3 *a)
 	return out;
 }
 
+void vec3_apply(struct Vec3 *v, double (*f)(double))
+{
+	v->x = f(v->x);
+	v->y = f(v->y);
+	v->z = f(v->z);
+}
+
 struct Ray
 {
 	struct Vec3 o;
@@ -91,13 +101,16 @@ struct Sphere
 {
 	struct Vec3 o;
 	double r;
+	struct Vec3 color;
 };
 
 struct Ray create_ray(double x, double y);
 
 int sphere_hit(struct Ray *r, struct Sphere *sp, double *t);
 
-struct Vec3 sphere_normal(struct Vec3 *sp_o , struct Vec3 *hit);
+struct Vec3 sphere_normal(struct Sphere *sp , struct Vec3 *hit);
+
+int ray_hit(struct Ray *r, struct Sphere *objs[], int objs_len, struct Sphere *obj, double *t);
 
 void swap(double*, double*);
 
@@ -119,8 +132,12 @@ double rand_2()
 int main(void)
 {
 	unsigned char data[WIDTH*HEIGHT*3+(WIDTH*4)];
-	struct Sphere sp = {{0.0, 0.0, -5.0}, 3.0};
-	struct Sphere light = {{2.0, 1.0, -1.0}, 5.0};
+	struct Sphere sp = {{-4.0, 0.0, -7.0}, 3.0, {0.78, 0.13, 0.13}};
+	struct Sphere sp2 = {{4.0, 0.0, -7.0}, 3.0, {0.13, 0.13, 0.78}};
+	struct Sphere light = {{2.0, 0.0, -1.0}, 5.0, {1.0, 1.0, 1.0}};
+
+	struct Sphere *scene_spheres[] = {&sp, &sp2};
+	int scene_spheres_len = 2;
 
 	clock_t begin = clock();
 
@@ -130,27 +147,29 @@ int main(void)
 		{
 			struct Vec3 out_col = {0.0, 0.0, 0.0};
 
-			for (int s = 0; s < SS; s++)
-			{
-				// struct Ray ray = create_ray(x, y);
-				struct Ray ray = create_ray((double)x + rand_2(), (double)y + rand_2());
+			// for (int s = 0; s < SS; s++)
+			// {
+				struct Ray ray = create_ray(x, y);
+				// struct Ray ray = create_ray((double)x + rand_2(), (double)y + rand_2());
 
-				double t;
+				struct Sphere obj;
+				double t = DBL_MAX;
 
-				if (sphere_hit(&ray, &sp, &t))
+				if (ray_hit(&ray, scene_spheres, scene_spheres_len, &obj, &t))
 				{
 					struct Vec3 dist = vec3_scale(&ray.d, t);
 					struct Vec3 hit_p = vec3_add(&ray.o, &dist);
-					struct Vec3 norml = sphere_normal(&sp.o, &hit_p);
+					struct Vec3 norml = sphere_normal(&obj, &hit_p);
 					struct Vec3 light_v = vec3_sub(&light.o, &hit_p);
 					struct Vec3 light_n = vec3_norm(&light_v);
 					double l_int = vec3_dot(&norml, &light_n) * light.r / pow(vec3_mag(&light_v), 2.0);
-					struct Vec3 col = {gamma_encode((200.0 / 255.0) * l_int), gamma_encode((35.0 / 255.0) * l_int), gamma_encode((35.0 / 255.0) * l_int)};
+					struct Vec3 col = vec3_scale(&(obj.color), l_int);
+					vec3_apply(&col, &gamma_encode);
 					out_col = vec3_add(&out_col, &col);
 				}
-			}
+			// }
 
-			out_col = vec3_div(&out_col, SS);
+			// out_col = vec3_div(&out_col, SS);
 
 			int pos = (WIDTH * 3 * y) + (3 * x);
 
@@ -187,6 +206,24 @@ struct Ray create_ray(double x, double y)
 	return out;
 }
 
+int ray_hit(struct Ray *r, struct Sphere *objs[], int objs_len, struct Sphere *obj, double *t)
+{
+	int hit = 0;
+	double dist = *t;
+
+	for (int i = 0; i < objs_len; i++)
+	{
+		if (sphere_hit(r, objs[i], &dist) && dist < *t)
+		{
+			*obj = *objs[i];
+			*t = dist;
+			hit = 1;
+		}
+	}
+
+	return hit;
+}
+
 int sphere_hit(struct Ray *r, struct Sphere *sp, double *t)
 {
 	struct Vec3 L = vec3_sub(&sp->o, &r->o);
@@ -213,9 +250,9 @@ int sphere_hit(struct Ray *r, struct Sphere *sp, double *t)
 	return 1;
 }
 
-struct Vec3 sphere_normal(struct Vec3 *sp_o , struct Vec3 *hit)
+struct Vec3 sphere_normal(struct Sphere *sp , struct Vec3 *hit)
 {
-	struct Vec3 out = vec3_sub(hit, sp_o);
+	struct Vec3 out = vec3_sub(hit, &(sp->o));
 	return vec3_norm(&out);
 }
 
